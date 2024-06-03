@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import math
 pi = math.pi
+#This need resize function
 def color_detect(arr, y, cb, cr, h, w):
     for i in range(0, h):
         for j in range(0, w):
@@ -22,14 +23,14 @@ def down_sampling(arr, h, w):
         wmod = w
     for i in range(0, hmod, 2):
         for j in range(0, wmod, 2):
-            avg = arr[i][j] + arr[i+1][j] + arr[i][j+1] + arr[i+1][j+1]
+            avg = (arr[i][j] + arr[i+1][j] + arr[i][j+1] + arr[i+1][j+1])/4
             arr[i][j] = avg
             arr[i+1][j] = avg
             arr[i][j+1] = avg
             arr[i+1][j+1] = avg
-def dct_trans(arr, h, w):
-    for i in range(8):
-        for j in range(8):
+def dct_trans(arr, h, w):   
+    for i in range(0, h, 8):
+        for j in range(0, w, 8):
  
             # ci and cj depends on frequency as well as
             # number of row and columns of specified matrix
@@ -45,22 +46,25 @@ def dct_trans(arr, h, w):
             # sum will temporarily store the sum of
             # cosine signals
             sum = 0
-            for k in range(8):
-                for l in range(8):
- 
-                    dct1 = arr[k][l] * math.cos((2 * k + 1) * i * pi / (
+            for k in range(0, h, 8):
+                for l in range(0, w, 8):
+                    dct1 = (arr[k][l] - 128) * math.cos((2 * k + 1) * i * pi / (
                         2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
                     sum = sum + dct1
             arr[i][j] = ci * cj * sum
-img = cv2.imread('D:\Local Disk\Python\sample.bmp') 
+# def quantization(arr):
+    
+img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
 x = img.shape[0]
 y = img.shape[1]
 y_img = np.empty(shape=(x, y))
 cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(img, y_img, cb_img, cr_img, x, y)
-down_sampling(cb_img, x, y)
-down_sampling(cr_img, x, y)
+print(y_img)
+# cv2.dct(y_img, cv2.DCT_INVERSE)
+# down_sampling(cb_img, x, y)
+# down_sampling(cr_img, x, y)
 dct_trans(y_img, x, y)
 print(y_img)
 # print(img.shape)
