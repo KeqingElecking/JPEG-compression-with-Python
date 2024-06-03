@@ -51,7 +51,6 @@ def dct_trans(arr, h, w):
                     dct1 = arr[k][l] * math.cos((2 * k + 1) * i * pi / (
                         2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
                     sum = sum + dct1
- 
             arr[i][j] = ci * cj * sum
 img = cv2.imread('D:\Local Disk\Python\sample.bmp') 
 x = img.shape[0]
