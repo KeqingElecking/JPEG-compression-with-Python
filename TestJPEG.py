@@ -3,6 +3,13 @@ import numpy as np
 import math
 pi = math.pi
 #This need resize function
+def resize(arr, w, h):
+    if (h%2==1):
+        h = h+1
+    if (w%2==1):
+        w = w+1
+    arr = cv2.resize(arr, (w, h), cv2.INTER_LINEAR)
+    return arr, w, h    
 def color_detect(arr, y, cb, cr, h, w):
     for i in range(0, h):
         for j in range(0, w):
@@ -12,16 +19,8 @@ def color_detect(arr, y, cb, cr, h, w):
             cr[i][j] = 0.5*color[0] - 0.4187*color[1] - 0.0813*color[2] + 128
     return y, cb, cr
 def down_sampling(arr, h, w):
-    if (h%2==1):
-        hmod = h-1
-    else:
-        hmod = h
-    if (w%2==1):
-        wmod = w-1
-    else:
-        wmod = w
-    for i in range(0, hmod, 2):
-        for j in range(0, wmod, 2):
+    for i in range(0, h, 2):
+        for j in range(0, w, 2):
             avg = (arr[i][j] + arr[i+1][j] + arr[i][j+1] + arr[i+1][j+1])/4
             arr[i][j] = avg
             arr[i+1][j] = avg
@@ -51,19 +50,21 @@ def dct_trans(arr, h, w):
                         2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
                     sum = sum + dct1
             arr[i][j] = ci * cj * sum
-# def quantization(arr):
-    
+# def quantization(arr):  
 img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
+dummy = img
 x = img.shape[0]
 y = img.shape[1]
+dummy, y, x = resize(dummy, y, x)
 y_img = np.empty(shape=(x, y))
 cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
-y_img, cb_img, cr_img = color_detect(img, y_img, cb_img, cr_img, x, y)
+y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
 print(y_img)
-# cv2.dct(y_img, cv2.DCT_INVERSE)
+cv2.dct(y_img, y_img, cv2.DCT_INVERSE)
+print(y_img)
 # down_sampling(cb_img, x, y)
 # down_sampling(cr_img, x, y)
-dct_trans(y_img, x, y)
-print(y_img)
+# dct_trans(y_img, x, y)
+# print(y_img)
 # print(img.shape)
