@@ -1,13 +1,14 @@
 import cv2 
 import numpy as np
 import math
+Q = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix.txt', delimiter='\t', dtype=int)
 pi = math.pi
 #This need resize function
 def resize(arr, w, h):
-    if (h%2==1):
-        h = h+1
-    if (w%2==1):
-        w = w+1
+    if (h%8!=0):
+        h += (8 - h%8)
+    if (w%8!=0):
+        w += (8 - w%8)
     arr = cv2.resize(arr, (w, h), cv2.INTER_LINEAR)
     return arr, w, h    
 def color_detect(arr, y, cb, cr, h, w):
@@ -50,7 +51,12 @@ def dct_trans(arr, h, w):
                         2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
                     sum = sum + dct1
             arr[i][j] = ci * cj * sum
-# def quantization(arr):  
+# Quantization Matrix: Q50
+def quantization(arr, h, w):  
+    for i in range(0, h, 8):
+        for j in range(0, w, 8):
+            arr[i:(i+8), j:(j+8)] = np.round(arr[i:(i+8), j:(j+8)]/Q)
+# FINAL: Zigzag + Huffman encode
 img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
 dummy = img
 x = img.shape[0]
@@ -62,9 +68,13 @@ cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
 print(y_img)
 cv2.dct(y_img, y_img, cv2.DCT_INVERSE)
-print(y_img)
-# down_sampling(cb_img, x, y)
-# down_sampling(cr_img, x, y)
+down_sampling(cb_img, x, y)
+down_sampling(cr_img, x, y)
+cv2.dct(cb_img, cb_img, cv2.DCT_INVERSE)
+cv2.dct(cr_img, cr_img, cv2.DCT_INVERSE)
+quantization(y_img, x, y)
+quantization(cb_img, x, y)
+quantization(cr_img, x, y)
 # dct_trans(y_img, x, y)
-# print(y_img)
+print(y_img)
 # print(img.shape)
