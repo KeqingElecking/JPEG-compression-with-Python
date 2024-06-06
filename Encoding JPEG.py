@@ -1,5 +1,6 @@
 import cv2 
 import numpy as np
+import array
 import math
 Q = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix.txt', delimiter='\t', dtype=int)
 pi = math.pi
@@ -27,9 +28,9 @@ def down_sampling(arr, h, w):
             arr[i+1][j] = avg
             arr[i][j+1] = avg
             arr[i+1][j+1] = avg
-def dct_trans(arr, h, w):   
-    for i in range(0, h, 8):
-        for j in range(0, w, 8):
+def dct_trans(arr):
+    for i in range(8):
+        for j in range(8):
  
             # ci and cj depends on frequency as well as
             # number of row and columns of specified matrix
@@ -45,18 +46,60 @@ def dct_trans(arr, h, w):
             # sum will temporarily store the sum of
             # cosine signals
             sum = 0
-            for k in range(0, h, 8):
-                for l in range(0, w, 8):
+            for k in range(8):
+                for l in range(8):
                     dct1 = (arr[k][l] - 128) * math.cos((2 * k + 1) * i * pi / (
                         2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
                     sum = sum + dct1
             arr[i][j] = ci * cj * sum
+def dct_full(arr, h ,w):
+    for i in range(0, h, 8):
+        for j in range(0, w, 8):
+            block = arr[i:(i+8), j:(j+8)]
+            dct_trans(block)
 # Quantization Matrix: Q50
 def quantization(arr, h, w):  
     for i in range(0, h, 8):
         for j in range(0, w, 8):
             arr[i:(i+8), j:(j+8)] = np.round(arr[i:(i+8), j:(j+8)]/Q)
 # FINAL: Zigzag + Huffman encode
+def zigzag(arr):
+    n = 8
+    zigzag_order = []
+    for i in range(2 * n - 1):
+        if i < n:
+            if i % 2 == 0:
+                x, y = i, 0
+                while x >= 0:
+                    zigzag_order.append(arr[x][y])
+                    x -= 1
+                    y += 1
+            else:
+                x, y = 0, i
+                while y >= 0:
+                    zigzag_order.append(arr[x][y])
+                    x += 1
+                    y -= 1
+        else:
+            if i % 2 == 0:
+                x, y = n - 1, i - n + 1
+                while y < n:
+                    zigzag_order.append(arr[x][y])
+                    x -= 1
+                    y += 1
+            else:
+                x, y = i - n + 1, n - 1
+                while x < n:
+                    zigzag_order.append(arr[x][y])
+                    x += 1
+                    y -= 1
+    return zigzag_order
+def zigzagfull(arr, h, w):
+    zigzag_full = []
+    for i in range (0, h, 8):
+        for j in range (0, w, 8):
+            zigzag_full.extend(zigzag(arr[i:(i+8), j:(j+8)]))
+    return zigzag_full
 img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
 dummy = img
 x = img.shape[0]
@@ -67,14 +110,17 @@ cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
 print(y_img)
-cv2.dct(y_img, y_img, cv2.DCT_INVERSE)
+dct_full(y_img, x, y)
+dct_full(cb_img, x, y)
+dct_full(cr_img, x, y)
+print(y_img)
+# cv2.dct(y_img, y_img, cv2.DCT_INVERSE)
 down_sampling(cb_img, x, y)
 down_sampling(cr_img, x, y)
-cv2.dct(cb_img, cb_img, cv2.DCT_INVERSE)
-cv2.dct(cr_img, cr_img, cv2.DCT_INVERSE)
 quantization(y_img, x, y)
-quantization(cb_img, x, y)
-quantization(cr_img, x, y)
-# dct_trans(y_img, x, y)
 print(y_img)
+# quantization(cb_img, x, y)
+# quantization(cr_img, x, y)
+y_zigzag = zigzagfull(y_img, x, y)
+print(y_zigzag)
 # print(img.shape)
