@@ -1,84 +1,104 @@
-def zigzag_encode_block(block):
-    """
-    Perform zigzag encoding on a single 8x8 block of image data using a for loop.
+import numpy as np
+from collections import Counter, defaultdict
+import heapq
 
-    :param block: A 2D list or numpy array of shape (8, 8)
-    :return: A list containing the zigzag order of the input block
-    """
-    n = 8
-    zigzag_order = []
+# Helper function to perform zigzag scan
+def zigzag_scan(block):
+    zigzag_order = [
+         0,  1,  5,  6, 14, 15, 27, 28,
+         2,  4,  7, 13, 16, 26, 29, 42,
+         3,  8, 12, 17, 25, 30, 41, 43,
+         9, 11, 18, 24, 31, 40, 44, 53,
+        10, 19, 23, 32, 39, 45, 52, 54,
+        20, 22, 33, 38, 46, 51, 55, 60,
+        21, 34, 37, 47, 50, 56, 59, 61,
+        35, 36, 48, 49, 57, 58, 62, 63
+    ]
+    return [block.flatten()[i] for i in zigzag_order]
 
-    for i in range(2 * n - 1):
-        if i < n:
-            if i % 2 == 0:
-                x, y = i, 0
-                while x >= 0:
-                    zigzag_order.append(block[x][y])
-                    x -= 1
-                    y += 1
-            else:
-                x, y = 0, i
-                while y >= 0:
-                    zigzag_order.append(block[x][y])
-                    x += 1
-                    y -= 1
+# Helper function to perform run-length encoding
+def run_length_encode(coeffs):
+    rle = []
+    zeros = 0
+    for i in range(1, len(coeffs)):
+        if coeffs[i] == 0:
+            zeros += 1
         else:
-            if i % 2 == 0:
-                x, y = n - 1, i - n + 1
-                while y < n:
-                    zigzag_order.append(block[x][y])
-                    x -= 1
-                    y += 1
-            else:
-                x, y = i - n + 1, n - 1
-                while x < n:
-                    zigzag_order.append(block[x][y])
-                    x += 1
-                    y -= 1
+            while zeros > 15:
+                rle.append((15, 0))
+                zeros -= 16
+            rle.append((zeros, coeffs[i]))
+            zeros = 0
+    rle.append((0, 0))  # EOB
+    return rle
 
-    return zigzag_order
+# Helper function to build Huffman tree
+def build_huffman_tree(frequencies):
+    heap = [[weight, [symbol, ""]] for symbol, weight in frequencies.items()]
+    heapq.heapify(heap)
+    while len(heap) > 1:
+        lo = heapq.heappop(heap)
+        hi = heapq.heappop(heap)
+        for pair in lo[1:]:
+            pair[1] = '0' + pair[1]
+        for pair in hi[1:]:
+            pair[1] = '1' + pair[1]
+        heapq.heappush(heap, [lo[0] + hi[0]] + lo[1:] + hi[1:])
+    return sorted(heapq.heappop(heap)[1:], key=lambda p: (len(p[-1]), p))
 
-def zigzag_encode_matrix(matrix):
-    """
-    Perform zigzag encoding on an entire matrix with dimensions divisible by 8,
-    processing each 8x8 block separately.
+# Helper function to generate Huffman codes from the Huffman tree
+def generate_huffman_codes(huffman_tree):
+    huffman_codes = {}
+    for symbol, code in huffman_tree:
+        huffman_codes[symbol] = code
+    return huffman_codes
 
-    :param matrix: A 2D list or numpy array with dimensions divisible by 8
-    :return: A list containing the zigzag order of each 8x8 block concatenated
-    """
-    rows, cols = matrix.shape
-    zigzag_encoded = []
+# Step 1: Prepare example data
+block = np.array([
+    [52, 55, 61, 66, 70, 61, 64, 73],
+    [63, 59, 66, 90, 109, 85, 69, 72],
+    [62, 59, 68, 113, 144, 104, 66, 73],
+    [63, 58, 71, 122, 154, 106, 70, 69],
+    [67, 61, 68, 104, 126, 88, 68, 70],
+    [79, 65, 60, 70, 77, 68, 58, 75],
+    [85, 71, 64, 59, 55, 61, 65, 83],
+    [87, 79, 69, 68, 65, 76, 78, 94]
+])
 
-    for i in range(0, rows, 8):
-        for j in range(0, cols, 8):
-            block = matrix[i:i+8, j:j+8]
-            zigzag_encoded.extend(zigzag_encode_block(block))
+# Step 2: Perform zigzag scan and run-length encoding
+zigzag_coeffs = zigzag_scan(block)
+rle_coeffs = run_length_encode(zigzag_coeffs)
 
-    return zigzag_encoded
+# Step 3: Calculate frequencies of DC differences and AC (RUNLENGTH, SIZE) pairs
+previous_dc = 52
+dc_diff = zigzag_coeffs[0] - previous_dc
+dc_frequencies = Counter([dc_diff])
 
-# Example usage:
-if __name__ == "__main__":
-    import numpy as np
+ac_frequencies = Counter(rle_coeffs)
 
-    # Example 16x16 matrix
-    matrix = np.array([
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-        [17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
-        [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48],
-        [49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64],
-        [65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80],
-        [81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96],
-        [97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112],
-        [113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128],
-        [129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144],
-        [145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160],
-        [161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176],
-        [177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192],
-        [193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208],
-        [209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224],
-        [225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240],
-        [241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256]
-    ])
+# Step 4: Build Huffman trees
+dc_huffman_tree = build_huffman_tree(dc_frequencies)
+ac_huffman_tree = build_huffman_tree(ac_frequencies)
 
-    zigzag_encoded = zigzag_encode_matrix(matrix)
-    print(zigzag_encoded)
+# Step 5: Generate Huffman codes
+dc_huffman_codes = generate_huffman_codes(dc_huffman_tree)
+ac_huffman_codes = generate_huffman_codes(ac_huffman_tree)
+
+# Step 6: Encode the data using the generated Huffman codes
+def huffman_encode(value, huffman_codes):
+    return huffman_codes.get(value, '')
+
+# Encoding the DC coefficient
+dc_encoded = huffman_encode(dc_diff, dc_huffman_codes) + format(dc_diff, 'b')
+
+# Encoding the AC coefficients
+ac_encoded = ''.join([huffman_encode(pair, ac_huffman_codes) + format(pair[1], 'b') if pair[1] != 0 else huffman_encode(pair, ac_huffman_codes) for pair in rle_coeffs])
+
+# Concatenate DC and AC encoded strings
+encoded_block = dc_encoded + ac_encoded
+
+print("Zigzag Scanned Coefficients:", zigzag_coeffs)
+print("Run-Length Encoded Coefficients:", rle_coeffs)
+print("DC Huffman Codes:", dc_huffman_codes)
+print("AC Huffman Codes:", ac_huffman_codes)
+print("Huffman Encoded Block:", encoded_block)

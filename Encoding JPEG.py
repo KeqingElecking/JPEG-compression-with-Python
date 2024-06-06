@@ -100,6 +100,26 @@ def zigzagfull(arr, h, w):
         for j in range (0, w, 8):
             zigzag_full.extend(zigzag(arr[i:(i+8), j:(j+8)]))
     return zigzag_full
+def run_length_encode(arr):
+    rle = []
+    cnt0 = 0
+    for i in range(1, 64):
+        if arr[i] == 0:
+            cnt0 += 1
+        else:
+            while cnt0 > 15:
+                rle.append((15, 0))
+                cnt0 -= 16
+            rle.append((cnt0, int(arr[i])))
+            cnt0 = 0
+    rle.append((0, 0))  # EOB
+    return rle
+def rlefull(arr):
+    rle_full = []
+    for i in range (0, len(arr), 64):
+        rle_full.extend(run_length_encode(arr[i:(i+64)]))
+    return rle_full
+
 img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
 dummy = img
 x = img.shape[0]
@@ -111,16 +131,18 @@ cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
 print(y_img)
 dct_full(y_img, x, y)
-dct_full(cb_img, x, y)
-dct_full(cr_img, x, y)
 print(y_img)
 # cv2.dct(y_img, y_img, cv2.DCT_INVERSE)
-down_sampling(cb_img, x, y)
-down_sampling(cr_img, x, y)
+# down_sampling(cb_img, x, y)
+# down_sampling(cr_img, x, y)
+# dct_full(cb_img, x, y)
+# dct_full(cr_img, x, y)
 quantization(y_img, x, y)
 print(y_img)
 # quantization(cb_img, x, y)
 # quantization(cr_img, x, y)
 y_zigzag = zigzagfull(y_img, x, y)
-print(y_zigzag)
+# print(y_zigzag)
+y_rle = rlefull(y_zigzag)
+print(y_rle)
 # print(img.shape)
