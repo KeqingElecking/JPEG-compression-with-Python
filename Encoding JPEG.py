@@ -3,7 +3,11 @@ import numpy as np
 import math
 from collections import Counter, defaultdict
 import heapq
+import json
+import pickle
+import sys
 Q = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix.txt', delimiter='\t', dtype=int)
+Q2 = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix_Chr.txt', delimiter='\t', dtype=int)
 pi = math.pi
 #This need resize function
 def resize(arr, w, h):
@@ -45,7 +49,7 @@ def dct_trans(arr):
             sum_val = 0
             for k in range(8):
                 for l in range(8):
-                    dct1 = arr[k][l] * math.cos((2 * k + 1) * i * pi / (2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
+                    dct1 = (arr[k][l] - 128) * math.cos((2 * k + 1) * i * pi / (2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
                     sum_val += dct1
             dct_result[i][j] = ci * cj * sum_val
     return dct_result
@@ -56,10 +60,10 @@ def dct_full(arr, h, w):
             arr[i:(i + 8), j:(j + 8)] = dct_trans(arr[i:(i + 8), j:(j + 8)])
     return arr 
 # Quantization Matrix: Q50
-def quantization(arr, h, w):  
+def quantization(arr, h, w, quant = Q):  
     for i in range(0, h, 8):
         for j in range(0, w, 8):
-            arr[i:(i+8), j:(j+8)] = np.round(arr[i:(i+8), j:(j+8)]/Q)
+            arr[i:(i+8), j:(j+8)] = np.round(arr[i:(i+8), j:(j+8)]/quant)
 # FINAL: Zigzag + Huffman encode
 def zigzag(arr):
     n = 8
@@ -139,6 +143,7 @@ def generate_huffman_codes(huffman_tree):
     return huffman_codes
 def encode_block(arr):
     freq = Counter(arr)
+    # print("Frequencies:", freq)
     tree = build_huffman_tree(freq)
     code = generate_huffman_codes(tree)
     return code
@@ -159,6 +164,52 @@ def encode_ac_coefficient(run_length_pair, huffman_codes):
     else:
         encoded_value = '0' + format(value, 'b')
     return huffman_codes.get((run, abs(value)), '') + encoded_value
+def full_encode(zigzag, rle):
+    dc = []
+    diff = 0
+    for i in range(0, len(zigzag), 64):
+        dc.append(int(zigzag[i] - diff))
+        diff = zigzag[i]
+    dc_code = encode_block(dc)
+    cdt_place = np.where(np.all(np.array(rle) == (0, 0), axis=1))[0]
+    encoded_block = []
+    ac_code = []
+    start = 0
+    cnt = 0
+    for i in cdt_place:
+        subset = rle[start:i+1]
+        sub_code = encode_block(subset)
+    # Encode DC component
+        dc_value = dc[cnt]
+        dc_encoded = huffman_encode(dc_value, dc_code) + encode_value(dc_value)
+    # Encode AC components
+        ac_encoded = ''.join([encode_ac_coefficient(pair, sub_code) for pair in subset])
+    # Concatenate DC and AC encoded strings
+        encoded_block.append(dc_encoded + ac_encoded)
+        ac_code.append(sub_code)
+        start = i + 1
+        cnt += 1
+    return encoded_block, dc_code, ac_code
+# Function to convert the encoded block to a binary string
+def encoded_block_to_binary_string(encoded_block):
+    return ''.join(encoded_block)
+# Write the binary string to a binary file
+def write_encoded_to_binary_file(encoded_block, filename):
+    binary_string = encoded_block_to_binary_string(encoded_block)
+    with open(filename, 'wb') as f:
+        f.write(int(binary_string, 2).to_bytes((len(binary_string) + 7) // 8, byteorder='big'))
+# Function to convert the encoded block to a string
+def encoded_block_to_string(encoded_block):
+    return ''.join(encoded_block)
+def write_encoded_to_text_file(encoded_block, dc_codes, ac_codes, filename):
+    # Convert dc_codes and ac_codes to lists of tuples
+    dc_codes_list = list(dc_codes.items())
+    ac_codes_list = [[(str(k), v) for k, v in code.items()] for code in ac_codes]
+    # Combine the data into a single list
+    data = [dc_codes_list, ac_codes_list, encoded_block]
+    # Write the data to the file
+    with open(filename, 'w') as f:
+        json.dump(data, f)
 
 img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
 dummy = img
@@ -169,41 +220,32 @@ y_img = np.empty(shape=(x, y))
 cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
+totalNumberOfBitsWithoutCompression = len(y_img) * len(y_img[0]) * 8 + len(cb_img) * len(cb_img[0]) * 8 + len(cr_img) * len(cr_img[0]) * 8
+print(totalNumberOfBitsWithoutCompression)
 # print(y_img)
 # y_encoded = full_transform(y_img, x, y)
 # print(y_encoded)
 y_img = dct_full(y_img, x, y)
-# print(y_img)
-# dct_full(cb_img, x, y)
-# dct_full(cr_img, x, y)
+dct_full(cb_img, x, y)
+dct_full(cr_img, x, y)
 quantization(y_img, x, y)
-print(y_img)
-# quantization(cb_img, x, y)
-# quantization(cr_img, x, y)
+quantization(cb_img, x, y, Q2)
+quantization(cr_img, x, y, Q2)
 y_zigzag = zigzagfull(y_img, x, y)
+cb_zigzag = zigzagfull(cb_img, x, y)
+cr_zigzag = zigzagfull(cr_img, x, y)
 y_rle = rlefull(y_zigzag)
-# print(y_rle)
-y_dc = []
-diff = 0
-for i in range(0, len(y_zigzag), 64):
-    y_dc.append(int(y_zigzag[i] - diff))
-    diff = y_zigzag[i]
-y_dc_code = encode_block(y_dc)
-cdt_place = np.where(np.all(np.array(y_rle) == (0, 0), axis=1))[0]
-encoded_block = []
-start = 0
-cnt = 0
-for i in cdt_place:
-    subset = y_rle[start:i]
-    sub_code = encode_block(subset)
-    # Encode DC component
-    dc_value = y_dc[cnt]
-    dc_encoded = huffman_encode(dc_value, y_dc_code) + encode_value(dc_value)
-    # Encode AC components
-    ac_encoded = ''.join([encode_ac_coefficient(pair, sub_code) for pair in subset])
-    # Concatenate DC and AC encoded strings
-    encoded_block.append(dc_encoded + ac_encoded)
-    start = i + 1
-    cnt += 1
-print(''.join(encoded_block))
+cb_rle = rlefull(cb_zigzag)
+cr_rle = rlefull(cr_zigzag)
+y_encoded_block, y_dc_code, y_ac_code = full_encode(y_zigzag, y_rle)
+cb_encoded_block, cb_dc_code, cb_ac_code = full_encode(cb_zigzag, cb_rle)
+cr_encode_block, cr_dc_code, cr_ac_code = full_encode(cb_zigzag, cb_rle)
+# print(y_dc_code)
+def size(encoded, dc, ac):
+    encoded_block_size = sys.getsizeof(encoded)
+    dc_codes_size = sys.getsizeof(dc)
+    ac_codes_size = sum(sys.getsizeof(code) for code in ac)
+    return (ac_codes_size)
+print((size(y_encoded_block, y_dc_code, y_ac_code) + size(cb_encoded_block, cb_dc_code, cb_ac_code) + size(cr_encode_block, cr_dc_code, cr_ac_code))/totalNumberOfBitsWithoutCompression)
+# write_encoded_to_binary_file(encoded_block, y_dc_code, y_ac_code, 'D:\\Local Disk\\Python\\encoded_result_with_codes.bin')
 # print(img.shape)
