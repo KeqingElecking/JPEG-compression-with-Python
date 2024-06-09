@@ -1,7 +1,8 @@
 import cv2 
 import numpy as np
-import array
 import math
+from collections import Counter, defaultdict
+import heapq
 Q = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix.txt', delimiter='\t', dtype=int)
 pi = math.pi
 #This need resize function
@@ -28,35 +29,32 @@ def down_sampling(arr, h, w):
             arr[i+1][j] = avg
             arr[i][j+1] = avg
             arr[i+1][j+1] = avg
+# DCT Transformation function for 8x8 blocks
 def dct_trans(arr):
+    dct_result = np.zeros((8, 8))
     for i in range(8):
         for j in range(8):
- 
-            # ci and cj depends on frequency as well as
-            # number of row and columns of specified matrix
-            if (i == 0):
+            if i == 0:
                 ci = 1 / (8 ** 0.5)
             else:
                 ci = (2 / 8) ** 0.5
-            if (j == 0):
+            if j == 0:
                 cj = 1 / (8 ** 0.5)
             else:
                 cj = (2 / 8) ** 0.5
- 
-            # sum will temporarily store the sum of
-            # cosine signals
-            sum = 0
+            sum_val = 0
             for k in range(8):
                 for l in range(8):
-                    dct1 = (arr[k][l] - 128) * math.cos((2 * k + 1) * i * pi / (
-                        2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
-                    sum = sum + dct1
-            arr[i][j] = ci * cj * sum
-def dct_full(arr, h ,w):
+                    dct1 = arr[k][l] * math.cos((2 * k + 1) * i * pi / (2 * 8)) * math.cos((2 * l + 1) * j * pi / (2 * 8))
+                    sum_val += dct1
+            dct_result[i][j] = ci * cj * sum_val
+    return dct_result
+# DCT Transformation for the entire image
+def dct_full(arr, h, w):
     for i in range(0, h, 8):
         for j in range(0, w, 8):
-            block = arr[i:(i+8), j:(j+8)]
-            dct_trans(block)
+            arr[i:(i + 8), j:(j + 8)] = dct_trans(arr[i:(i + 8), j:(j + 8)])
+    return arr 
 # Quantization Matrix: Q50
 def quantization(arr, h, w):  
     for i in range(0, h, 8):
@@ -119,6 +117,48 @@ def rlefull(arr):
     for i in range (0, len(arr), 64):
         rle_full.extend(run_length_encode(arr[i:(i+64)]))
     return rle_full
+def build_huffman_tree(frequencies):
+    heap = [[weight, [symbol, ""]] for symbol, weight in frequencies.items()]
+    heapq.heapify(heap)
+    while len(heap) > 1:
+        lo = heapq.heappop(heap)
+        hi = heapq.heappop(heap)
+        for pair in lo[1:]:
+            pair[1] = '0' + pair[1]
+        for pair in hi[1:]:
+            pair[1] = '1' + pair[1]
+        heapq.heappush(heap, [lo[0] + hi[0]] + lo[1:] + hi[1:])
+    if heap:
+        return sorted(heapq.heappop(heap)[1:], key=lambda p: (len(p[-1]), p))
+    else:
+        return []
+def generate_huffman_codes(huffman_tree):
+    huffman_codes = {}
+    for symbol, code in huffman_tree:
+        huffman_codes[symbol] = code
+    return huffman_codes
+def encode_block(arr):
+    freq = Counter(arr)
+    tree = build_huffman_tree(freq)
+    code = generate_huffman_codes(tree)
+    return code
+def encode_value(value):
+    if value < 0:
+        return '1' + format(-value, 'b')
+    else:
+        return '0' + format(value, 'b')
+def huffman_encode(value, huffman_codes):
+    encoded_value = huffman_codes.get(abs(value), '')
+    sign_bit = '1' if value < 0 else '0'
+    return sign_bit + encoded_value
+def encode_ac_coefficient(run_length_pair, huffman_codes):
+    run, value = run_length_pair
+    encoded_run = format(run, 'b').zfill(4)  # Ensure 4 bits for run length
+    if value < 0:
+        encoded_value = '1' + format(-value, 'b')
+    else:
+        encoded_value = '0' + format(value, 'b')
+    return huffman_codes.get((run, abs(value)), '') + encoded_value
 
 img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
 dummy = img
@@ -129,12 +169,11 @@ y_img = np.empty(shape=(x, y))
 cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
-print(y_img)
-dct_full(y_img, x, y)
-print(y_img)
-# cv2.dct(y_img, y_img, cv2.DCT_INVERSE)
-# down_sampling(cb_img, x, y)
-# down_sampling(cr_img, x, y)
+# print(y_img)
+# y_encoded = full_transform(y_img, x, y)
+# print(y_encoded)
+y_img = dct_full(y_img, x, y)
+# print(y_img)
 # dct_full(cb_img, x, y)
 # dct_full(cr_img, x, y)
 quantization(y_img, x, y)
@@ -142,7 +181,29 @@ print(y_img)
 # quantization(cb_img, x, y)
 # quantization(cr_img, x, y)
 y_zigzag = zigzagfull(y_img, x, y)
-# print(y_zigzag)
 y_rle = rlefull(y_zigzag)
-print(y_rle)
+# print(y_rle)
+y_dc = []
+diff = 0
+for i in range(0, len(y_zigzag), 64):
+    y_dc.append(int(y_zigzag[i] - diff))
+    diff = y_zigzag[i]
+y_dc_code = encode_block(y_dc)
+cdt_place = np.where(np.all(np.array(y_rle) == (0, 0), axis=1))[0]
+encoded_block = []
+start = 0
+cnt = 0
+for i in cdt_place:
+    subset = y_rle[start:i]
+    sub_code = encode_block(subset)
+    # Encode DC component
+    dc_value = y_dc[cnt]
+    dc_encoded = huffman_encode(dc_value, y_dc_code) + encode_value(dc_value)
+    # Encode AC components
+    ac_encoded = ''.join([encode_ac_coefficient(pair, sub_code) for pair in subset])
+    # Concatenate DC and AC encoded strings
+    encoded_block.append(dc_encoded + ac_encoded)
+    start = i + 1
+    cnt += 1
+print(''.join(encoded_block))
 # print(img.shape)
