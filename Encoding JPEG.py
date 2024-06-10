@@ -4,8 +4,8 @@ import math
 from collections import Counter, defaultdict
 import heapq
 import json
-import pickle
 import sys
+import jpeglib as jpeg
 Q = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix.txt', delimiter='\t', dtype=int)
 Q2 = np.loadtxt('D:\\Local Disk\\Python\\Quantization_Matrix_Chr.txt', delimiter='\t', dtype=int)
 pi = math.pi
@@ -136,17 +136,16 @@ def build_huffman_tree(frequencies):
         return sorted(heapq.heappop(heap)[1:], key=lambda p: (len(p[-1]), p))
     else:
         return []
+def encode_block(arr):
+    freq = Counter(arr)
+    tree = build_huffman_tree(freq)
+    code = generate_huffman_codes(tree)
+    return code
 def generate_huffman_codes(huffman_tree):
     huffman_codes = {}
     for symbol, code in huffman_tree:
         huffman_codes[symbol] = code
     return huffman_codes
-def encode_block(arr):
-    freq = Counter(arr)
-    # print("Frequencies:", freq)
-    tree = build_huffman_tree(freq)
-    code = generate_huffman_codes(tree)
-    return code
 def encode_value(value):
     if value < 0:
         return '1' + format(-value, 'b')
@@ -190,28 +189,16 @@ def full_encode(zigzag, rle):
         start = i + 1
         cnt += 1
     return encoded_block, dc_code, ac_code
-# Function to convert the encoded block to a binary string
-def encoded_block_to_binary_string(encoded_block):
-    return ''.join(encoded_block)
-# Write the binary string to a binary file
-def write_encoded_to_binary_file(encoded_block, filename):
-    binary_string = encoded_block_to_binary_string(encoded_block)
-    with open(filename, 'wb') as f:
-        f.write(int(binary_string, 2).to_bytes((len(binary_string) + 7) // 8, byteorder='big'))
-# Function to convert the encoded block to a string
-def encoded_block_to_string(encoded_block):
-    return ''.join(encoded_block)
-def write_encoded_to_text_file(encoded_block, dc_codes, ac_codes, filename):
-    # Convert dc_codes and ac_codes to lists of tuples
-    dc_codes_list = list(dc_codes.items())
-    ac_codes_list = [[(str(k), v) for k, v in code.items()] for code in ac_codes]
-    # Combine the data into a single list
-    data = [dc_codes_list, ac_codes_list, encoded_block]
-    # Write the data to the file
-    with open(filename, 'w') as f:
-        json.dump(data, f)
-
-img = cv2.imread('D:\\Local Disk\\Python\\sample.bmp') 
+# def write_encoded_to_text_file(encoded_block, dc_codes, ac_codes, filename):
+#     # Convert dc_codes and ac_codes to lists of tuples
+#     dc_codes_list = list(dc_codes.items())
+#     ac_codes_list = [[(str(k), v) for k, v in code.items()] for code in ac_codes]
+#     # Combine the data into a single list
+#     data = [dc_codes_list, ac_codes_list, encoded_block]
+#     # Write the data to the file
+#     with open(filename, 'w') as f:
+#         json.dump(data, f)
+img = cv2.imread('D:\\Local Disk\\Python\\sample_1.bmp') 
 dummy = img
 x = img.shape[0]
 y = img.shape[1]
@@ -220,11 +207,9 @@ y_img = np.empty(shape=(x, y))
 cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
-totalNumberOfBitsWithoutCompression = len(y_img) * len(y_img[0]) * 8 + len(cb_img) * len(cb_img[0]) * 8 + len(cr_img) * len(cr_img[0]) * 8
-print(totalNumberOfBitsWithoutCompression)
-# print(y_img)
-# y_encoded = full_transform(y_img, x, y)
-# print(y_encoded)
+# cv2.imwrite('output.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 50])
+OriginalBits = sys.getsizeof(y_img) + sys.getsizeof(cb_img) + sys.getsizeof(cr_img)
+print(f"Number of Bits originally is {OriginalBits}")
 y_img = dct_full(y_img, x, y)
 dct_full(cb_img, x, y)
 dct_full(cr_img, x, y)
@@ -239,13 +224,13 @@ cb_rle = rlefull(cb_zigzag)
 cr_rle = rlefull(cr_zigzag)
 y_encoded_block, y_dc_code, y_ac_code = full_encode(y_zigzag, y_rle)
 cb_encoded_block, cb_dc_code, cb_ac_code = full_encode(cb_zigzag, cb_rle)
-cr_encode_block, cr_dc_code, cr_ac_code = full_encode(cb_zigzag, cb_rle)
+cr_encoded_block, cr_dc_code, cr_ac_code = full_encode(cb_zigzag, cb_rle)
 # print(y_dc_code)
 def size(encoded, dc, ac):
     encoded_block_size = sys.getsizeof(encoded)
     dc_codes_size = sys.getsizeof(dc)
     ac_codes_size = sum(sys.getsizeof(code) for code in ac)
-    return (ac_codes_size)
-print((size(y_encoded_block, y_dc_code, y_ac_code) + size(cb_encoded_block, cb_dc_code, cb_ac_code) + size(cr_encode_block, cr_dc_code, cr_ac_code))/totalNumberOfBitsWithoutCompression)
-# write_encoded_to_binary_file(encoded_block, y_dc_code, y_ac_code, 'D:\\Local Disk\\Python\\encoded_result_with_codes.bin')
-# print(img.shape)
+    return (ac_codes_size + dc_codes_size + encoded_block_size)
+CompressedBits = (size(y_encoded_block, y_dc_code, y_ac_code) + size(cb_encoded_block, cb_dc_code, cb_ac_code) + size(cr_encoded_block, cr_dc_code, cr_ac_code))
+print(f"Number of bit after compression is {CompressedBits}")
+print(f"The compression ratio is {OriginalBits/CompressedBits}")
