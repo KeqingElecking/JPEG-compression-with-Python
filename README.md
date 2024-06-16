@@ -1,1 +1,1 @@
-gg
+Nén JPEG bằng mã Huffman
