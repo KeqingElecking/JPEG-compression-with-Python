@@ -198,6 +198,23 @@ def full_encode(zigzag, rle):
 #     # Write the data to the file
 #     with open(filename, 'w') as f:
 #         json.dump(data, f)
+
+def write_encoded_to_text_file(encoded_block, dc_codes, ac_codes, filename):
+    try:
+        # Convert dc_codes and ac_codes to lists of tuples
+        dc_codes_list = list(dc_codes.items())
+        ac_codes_list = [list(code.items()) for code in ac_codes]
+
+        # Combine the data into a single list
+        data = [dc_codes_list, ac_codes_list, encoded_block]
+
+        # Write the data to the file
+        with open(filename, 'w') as f:
+            json.dump(data, f)
+        print("Data successfully written to", filename)
+    except Exception as e:
+        print("Failed to write data to file:", e)
+
 img = cv2.imread('D:\\Local Disk\\Python\\sample_1.bmp') 
 dummy = img
 x = img.shape[0]
@@ -207,19 +224,24 @@ y_img = np.empty(shape=(x, y))
 cb_img = np.empty(shape=(x, y))
 cr_img = np.empty(shape=(x, y))
 y_img, cb_img, cr_img = color_detect(dummy, y_img, cb_img, cr_img, x, y)
+np.savetxt('y_img.txt', y_img, fmt='%d', delimiter='  ')
 # cv2.imwrite('output.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 50])
 OriginalBits = sys.getsizeof(y_img) + sys.getsizeof(cb_img) + sys.getsizeof(cr_img)
 print(f"Number of Bits originally is {OriginalBits}")
 y_img = dct_full(y_img, x, y)
+np.savetxt('y_DCT.txt', y_img, fmt='%d', delimiter='  ')
 dct_full(cb_img, x, y)
 dct_full(cr_img, x, y)
 quantization(y_img, x, y)
+np.savetxt('y_quantization.txt', y_img, fmt='%d', delimiter=' ')
 quantization(cb_img, x, y, Q2)
 quantization(cr_img, x, y, Q2)
 y_zigzag = zigzagfull(y_img, x, y)
+np.savetxt('y_zigzag.txt', y_img, fmt='%d')
 cb_zigzag = zigzagfull(cb_img, x, y)
 cr_zigzag = zigzagfull(cr_img, x, y)
 y_rle = rlefull(y_zigzag)
+np.savetxt('y_RLE.txt', y_rle, fmt='%d')
 cb_rle = rlefull(cb_zigzag)
 cr_rle = rlefull(cr_zigzag)
 y_encoded_block, y_dc_code, y_ac_code = full_encode(y_zigzag, y_rle)
@@ -234,3 +256,4 @@ def size(encoded, dc, ac):
 CompressedBits = (size(y_encoded_block, y_dc_code, y_ac_code) + size(cb_encoded_block, cb_dc_code, cb_ac_code) + size(cr_encoded_block, cr_dc_code, cr_ac_code))
 print(f"Number of bit after compression is {CompressedBits}")
 print(f"The compression ratio is {OriginalBits/CompressedBits}")
+write_encoded_to_text_file(y_encoded_block,y_dc_code, y_ac_code, 'output_filename.json')
